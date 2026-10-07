@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Relação de Reuniões com Clientes — Semana Passada</title>
+<script src="chart.umd.min.js"></script>
+<script src="xlsx.full.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* Design system: Data-Dense Dashboard (UI/UX Pro Max) — blue + amber, WCAG AA */
+  :root{
+    --navy: #1E40AF;        /* primary (azul royal) */
+    --navy-soft: #1E3A8A;   /* primary hover/deep */
+    --accent: #2563EB;      /* secondary azul */
+    --accent-light: #EFF4FE;
+    --amber: #D97706;       /* accent/CTA âmbar (taxa) */
+    --ok: #1E7A46;
+    --ok-bg: #E5F4EA;
+    --pend: #DC2626;
+    --pend-bg: #FBEAE8;
+    --paper: #FFFFFF;
+    --bg: #F8FAFC;
+    --line: #DBEAFE;
+    --line-soft: #E9EEF6;
+    --text: #1E293B;
+    --text-soft: #64748B;
+
+    /* spacing rhythm 4/8 */
+    --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-6: 24px; --sp-8: 32px;
+
+    --sans: 'Fira Sans', 'Segoe UI', Inter, system-ui, Arial, sans-serif;
+    --mono: 'Fira Code', ui-monospace, 'SF Mono', 'Consolas', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  /* números em fonte monoespaçada tabular — não "pulam" ao trocar dados */
+  .kpi .value, .num{ font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  /* acessibilidade: focus visível para teclado */
+  a:focus-visible, button:focus-visible, label:focus-visible, [tabindex]:focus-visible{
+    outline: 3px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  .wrap{
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 48px 32px 64px;
+  }
+
+  /* Header */
+  header{
+    display:flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    border-bottom: 3px solid var(--navy);
+    padding-bottom: 20px;
+    margin-bottom: 36px;
+  }
+  .eyebrow{
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  h1{
+    font-size: 27px;
+    margin: 0;
+    color: var(--navy);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .period{
+    text-align: right;
+    color: var(--text-soft);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .period strong{ color: var(--navy); display:block; font-size: 14px; }
+
+  /* KPI cards */
+  .kpis{
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .kpi{
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 20px 22px;
+    position: relative;
+    overflow: hidden;
+  }
+  .kpi::before{
+    content:"";
+    position:absolute; left:0; top:0; bottom:0;
+    width: 4px;
+  }
+  .kpi.total::before{ background: var(--navy); }
+  .kpi.feito::before{ background: var(--ok); }
+  .kpi.pendente::before{ background: var(--pend); }
+  .kpi.taxa::before{ background: var(--amber); }
+  .kpi.taxa .value{ color: var(--amber); }
+  .kpi .label{
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-soft);
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .kpi .value{
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--navy);
+    line-height: 1;
+  }
+  .kpi .value span{
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-soft);
+    margin-left: 4px;
+  }
+
+  /* Charts row */
+  .charts{
+    display: grid;
+    grid-template-columns: 1fr 1.4fr;
+    gap: 16px;
+    margin-bottom: 36px;
+  }
+  .card{
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 22px 24px;
+  }
+  .card h2{
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--navy);
+    margin: 0 0 16px 0;
+    font-weight: 700;
+  }
+  .chart-holder{
+    position: relative;
+    height: 240px;
+  }
+  .pct-inline{
+    float: right;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--accent);
+    text-transform: none;
+    letter-spacing: normal;
+  }
+
+  /* Legend */
+  .legend{
+    display:flex;
+    gap: 20px;
+    margin-top: 14px;
+    justify-content: center;
+    font-size: 12.5px;
+    color: var(--text-soft);
+  }
+  .legend span{ display:flex; align-items:center; gap:6px; }
+  .dot{width:9px; height:9px; border-radius:2px; display:inline-block;}
+  .dot.ok{background: var(--ok);}
+  .dot.pend{background: var(--pend);}
+
+  /* Table section */
+  .table-card{
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 24px 24px 12px;
+  }
+  .table-head{
+    display:flex;
+    justify-content: space-between;
+    align-items:center;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .table-head h2{
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--navy);
+    margin: 0;
+    font-weight: 700;
+  }
+  .filters{ display:flex; gap:8px; }
+  .filters button{
+    border: 1px solid var(--line);
+    background: var(--paper);
+    color: var(--text-soft);
+    font-size: 12.5px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all .15s ease;
+  }
+  .filters button:hover{ border-color: var(--accent); color: var(--accent); }
+  .filters button.active{
+    background: var(--navy);
+    border-color: var(--navy);
+    color: #fff;
+  }
+
+  table{
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+  }
+  thead th{
+    text-align: left;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-soft);
+    font-weight: 700;
+    padding: 10px 10px;
+    border-bottom: 2px solid var(--line);
+  }
+  tbody td{
+    padding: 11px 10px;
+    border-bottom: 1px solid var(--line);
+    color: var(--text);
+    vertical-align: middle;
+  }
+  tbody tr:hover{ background: var(--accent-light); }
+  .cliente{ font-weight: 600; color: var(--navy); }
+  .obs{ color: var(--text-soft); font-size: 12.5px; }
+  .badge{
+    display:inline-block;
+    padding: 3px 11px;
+    border-radius: 20px;
+    font-size: 11.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+  }
+  .badge.ok{ background: var(--ok-bg); color: var(--ok); }
+  .badge.pend{ background: var(--pend-bg); color: var(--pend); }
+
+  footer{
+    margin-top: 28px;
+    text-align:center;
+    color: var(--text-soft);
+    font-size: 11.5px;
+  }
+
+  /* Barra de atualização */
+  .upload-bar{
+    display:flex;
+    align-items:center;
+    gap: 14px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+  /* botão sutil (ghost) */
+  .refresh-btn{
+    display:inline-flex;
+    align-items:center;
+    gap: 7px;
+    background: var(--paper);
+    color: var(--navy);
+    border: 1px solid var(--line);
+    padding: 8px 15px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .15s ease;
+  }
+  .refresh-btn:hover{
+    border-color: var(--accent);
+    background: var(--accent-light);
+    color: var(--accent);
+  }
+  .refresh-btn svg{ width:15px; height:15px; }
+  .refresh-btn.loading svg{ animation: spin 1s linear infinite; }
+  @keyframes spin{ to{ transform: rotate(360deg); } }
+
+  /* data/hora última atualização — pequena e discreta */
+  .last-update{
+    display:inline-flex;
+    align-items:center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-soft);
+  }
+  .last-update svg{ width:14px; height:14px; opacity:.7; }
+
+  .upload-status{
+    font-size: 12.5px;
+    color: var(--text-soft);
+  }
+  .upload-status:empty{ display:none; }
+  .upload-status.success{ color: var(--ok); font-weight: 600; }
+  .upload-status.error{ color: var(--pend); font-weight: 600; }
+
+  /* ===== Responsivo (mobile-first breakpoints: 1024 / 768 / 480) ===== */
+
+  /* Tablet e abaixo */
+  @media (max-width: 1024px){
+    .wrap{ padding: 36px 24px 48px; }
+    .charts{ grid-template-columns: 1fr; }   /* charts empilham */
+  }
+
+  /* Celular grande / tablet pequeno */
+  @media (max-width: 768px){
+    .wrap{ padding: 24px 16px 40px; }
+    header{ flex-direction: column; align-items: flex-start; gap: 10px; }
+    .period{ text-align:left; }
+    h1{ font-size: 23px; }
+    .kpis{ grid-template-columns: repeat(2,1fr); gap: 12px; }
+    .upload-bar{ flex-wrap: wrap; }
+    .upload-btn{ padding: 11px 16px; }        /* alvo de toque ≥44px */
+
+    /* Tabela vira cards */
+    #clientTable thead{
+      position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); /* oculto visual, acessível */
+    }
+    #clientTable, #clientTable tbody, #clientTable tr, #clientTable td{ display:block; width:100%; }
+    #clientTable tr{
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+    }
+    #clientTable tbody tr:hover{ background: var(--paper); }
+    #clientTable td{
+      border: none;
+      padding: 5px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+    }
+    /* rótulo da coluna antes do valor */
+    #clientTable td::before{
+      content: attr(data-label);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: var(--text-soft);
+      font-weight: 700;
+      flex: 0 0 auto;
+    }
+    #clientTable td.cliente{
+      font-size: 15.5px;
+      padding-bottom: 8px;
+      margin-bottom: 4px;
+      border-bottom: 1px solid var(--line-soft);
+    }
+    #clientTable td.cliente::before{ display:none; }  /* nome é o título do card */
+    #clientTable td .obs, #clientTable td.obs{ text-align: right; }
+  }
+
+  /* Celular pequeno (375px) */
+  @media (max-width: 480px){
+    .kpis{ grid-template-columns: 1fr; }       /* KPIs empilham */
+    .filters{ width:100%; }
+    .filters button{ flex:1; min-height:44px; }
+    .table-head{ flex-direction: column; align-items: stretch; }
+  }
+
+  /* Respeitar redução de movimento */
+  @media (prefers-reduced-motion: reduce){
+    *{ animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <div class="eyebrow">Relatório Semanal</div>
+      <h1>Reuniões Clientes Start</h1>
+    </div>
+    <div class="period">
+      <strong>Semana de referência</strong>
+      06/07 a 13/07 de 2026
+    </div>
+  </header>
+
+  <div class="upload-bar">
+    <button class="refresh-btn" id="loadSheetBtn" type="button" aria-label="Atualizar dados da planilha">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+      Atualizar
+    </button>
+    <span class="last-update" id="lastUpdate">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      <span id="lastUpdateText">Ainda não atualizado</span>
+    </span>
+    <span class="upload-status" id="uploadStatus" role="status" aria-live="polite"></span>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi total">
+      <div class="label">Total de Clientes</div>
+      <div class="value" id="kpiTotal">–</div>
+    </div>
+    <div class="kpi feito">
+      <div class="label">Reuniões Feitas</div>
+      <div class="value" id="kpiFeito">–</div>
+    </div>
+    <div class="kpi pendente">
+      <div class="label">Pendentes</div>
+      <div class="value" id="kpiPendente">–</div>
+    </div>
+    <div class="kpi taxa">
+      <div class="label">Taxa de Conclusão</div>
+      <div class="value" id="kpiTaxa">–</div>
+    </div>
+  </div>
+
+  <div class="charts">
+    <div class="card">
+      <h2>Feito × Pendente <span class="pct-inline" id="donutPct">–</span></h2>
+      <div class="chart-holder">
+        <canvas id="donutChart"></canvas>
+      </div>
+      <div class="legend">
+        <span><i class="dot ok"></i>Feito</span>
+        <span><i class="dot pend"></i>Pendente</span>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Por Dia da Semana</h2>
+      <div class="chart-holder">
+        <canvas id="barChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-card">
+    <div class="table-head">
+      <h2>Relação Detalhada de Clientes</h2>
+      <div class="filters">
+        <button class="active" data-filter="all">Todos</button>
+        <button data-filter="Feito">Feito</button>
+        <button data-filter="Pendente">Pendente</button>
+      </div>
+    </div>
+    <table id="clientTable">
+      <thead>
+        <tr>
+          <th>Cliente</th>
+          <th>Dia Fixo</th>
+          <th>Horário</th>
+          <th>Status</th>
+          <th>Observação</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+
+  <footer>Gerado a partir da relação semanal de atendimentos — dados consolidados para reunião de acompanhamento.</footer>
+</div>
+
+<script>
+const data = [
+  ["ODC Galeazzi", "Segunda", "15:00", "Feito", ""],
+  ["ODC Redentora", "Segunda", "15:00", "Feito", ""],
+  ["ODC Av. Mirassolândia", "Segunda", "15:00", "Feito", ""],
+  ["ODC Borghese", "Segunda", "15:00", "Feito", ""],
+  ["ODC Nossa Senhora da Paz", "Segunda", "15:00", "Feito", ""],
+  ["ODC Av. de Maio", "Segunda", "15:00", "Feito", ""],
+  ["ODC Planalto", "Segunda", "15:00", "Feito", ""],
+  ["ODC Shopping Plaza", "Segunda", "15:00", "Feito", ""],
+  ["ODC Potirendaba", "Segunda", "15:00", "Feito", ""],
+  ["ODC Mirassol", "Segunda", "15:00", "Feito", ""],
+  ["OdontoCompany Jaçatuba", "A definir", "-", "Pendente", "Ajustando dia fixo com o cliente"],
+  ["OdontoCompany Sta. Terezinha", "A definir", "-", "Pendente", "Ajustando dia fixo com o cliente"],
+  ["OdontoCompany Barra Velha", "Terça", "15:00", "Feito", ""],
+  ["OdontoCompany Guaramirim", "Terça", "15:00", "Feito", ""],
+  ["OdontoCompany Schroeder", "Terça", "15:00", "Feito", ""],
+  ["OdontoCompany Tijucas", "Terça", "15:00", "Feito", ""],
+  ["OdontoCompany São Francisco do Sul", "Terça", "15:00", "Feito", ""],
+  ["OdontoCompany Massaranduba", "Terça", "15:00", "Feito", ""],
+  ["OdontoCompany Campina Verde", "A definir", "-", "Pendente", "Ajustando dia fixo com o cliente"],
+  ["OdontoCompany Capinópolis", "A definir", "-", "Pendente", "Ajustando dia fixo com o cliente"],
+  ["OdontoCompany Jd. São Manoel", "Sexta", "15:00", "Feito", ""],
+  ["OdontoCompany Jd. São Luís", "Sexta", "15:00", "Feito", ""],
+  ["OdontoCompany Capão Redondo", "Sexta", "15:00", "Feito", ""],
+  ["OdontoCompany Belém", "A definir", "-", "Pendente", "Ajustando dia fixo com o cliente"],
+  ["OdontoCompany Vila Diva", "Sexta", "11:00", "Feito", ""],
+  ["Mundo Aquático Park", "Quinta", "16:00", "Pendente", "Ajustando dia fixo com o cliente"],
+  ["Care Systems Bio Enzymes Ltda", "Sexta", "17:00", "Pendente", ""],
+  ["Dr. Feridas - Franchising", "Quinta", "15:00", "Feito", ""],
+  ["Moturial SP", "A definir", "-", "Pendente", "Ajustando dia fixo com o cliente"],
+  ["Moturial SJRP", "A definir", "-", "Pendente", "Ajustando dia fixo com o cliente"],
+  ["Oral Care Odontologia", "Quarta", "-", "Feito", "Ajustando dia fixo com o cliente"],
+];
+
+const okColor = "#1E7A46";
+const pendColor = "#DC2626";
+const diasOrdem = ["Segunda","Terça","Quarta","Quinta","Sexta","A definir"];
+
+let currentData = data;
+let currentFilter = "all";
+let donutChart = null;
+let barChart = null;
+
+function computeStats(rows){
+  const total = rows.length;
+  const feito = rows.filter(r => r[3] === "Feito").length;
+  const pendente = total - feito;
+  const taxa = total ? Math.round((feito/total)*100) : 0;
+  return { total, feito, pendente, taxa };
+}
+
+function renderKPIs(rows){
+  const { total, feito, pendente, taxa } = computeStats(rows);
+  document.getElementById("kpiTotal").textContent = total;
+  document.getElementById("kpiFeito").textContent = feito;
+  document.getElementById("kpiPendente").textContent = pendente;
+  document.getElementById("kpiTaxa").textContent = taxa + "%";
+  document.getElementById("donutPct").textContent = taxa + "% concluído";
+}
+
+function renderCharts(rows){
+  const { feito, pendente } = computeStats(rows);
+
+  if (donutChart) donutChart.destroy();
+  donutChart = new Chart(document.getElementById("donutChart"), {
+    type: "doughnut",
+    data: {
+      labels: ["Feito", "Pendente"],
+      datasets: [{
+        data: [feito, pendente],
+        backgroundColor: [okColor, pendColor],
+        borderWidth: 2,
+        borderColor: "#FFFFFF",
+        hoverOffset: 6
+      }]
+    },
+    options: {
+      cutout: "62%",
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          enabled: true,
+          callbacks: {
+            label: (ctx) => {
+              const val = ctx.parsed;
+              const tot = ctx.dataset.data.reduce((a, b) => a + b, 0);
+              const pct = tot ? Math.round((val / tot) * 100) : 0;
+              return `${ctx.label}: ${val} (${pct}%)`;
+            }
+          }
+        }
+      },
+      maintainAspectRatio: false
+    }
+  });
+
+  const porDia = diasOrdem.map(dia => {
+    const drows = rows.filter(r => r[1] === dia);
+    return {
+      dia,
+      feito: drows.filter(r => r[3] === "Feito").length,
+      pendente: drows.filter(r => r[3] === "Pendente").length
+    };
+  }).filter(d => d.feito > 0 || d.pendente > 0);
+
+  if (barChart) barChart.destroy();
+  barChart = new Chart(document.getElementById("barChart"), {
+    type: "bar",
+    data: {
+      labels: porDia.map(d => d.dia),
+      datasets: [
+        { label: "Feito", data: porDia.map(d => d.feito), backgroundColor: okColor, borderRadius: 4, maxBarThickness: 34 },
+        { label: "Pendente", data: porDia.map(d => d.pendente), backgroundColor: pendColor, borderRadius: 4, maxBarThickness: 34 }
+      ]
+    },
+    options: {
+      maintainAspectRatio: false,
+      scales: {
+        x: { stacked: true, grid: { display: false }, ticks: { font: { size: 11.5 }, color: "#66757F" } },
+        y: { stacked: true, beginAtZero: true, ticks: { stepSize: 2, font: { size: 11 }, color: "#66757F" }, grid: { color: "#EEF1F3" } }
+      },
+      plugins: {
+        legend: {
+          display: true,
+          position: "bottom",
+          labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, pointStyle: "rectRounded", font: { size: 12 }, color: "#66757F", padding: 14 }
+        },
+        tooltip: { enabled: true }
+      }
+    }
+  });
+}
+
+const tbody = document.getElementById("tableBody");
+const esc = s => (s ?? "").toString().replace(/[&<>"']/g, c => (
+  { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]
+));
+function renderTable(rows, filter){
+  tbody.innerHTML = "";
+  rows
+    .filter(r => filter === "all" || r[3] === filter)
+    .forEach(r => {
+      const tr = document.createElement("tr");
+      const badgeClass = r[3] === "Feito" ? "ok" : "pend";
+      // data-label alimenta o layout de cards no mobile (td::before)
+      tr.innerHTML = `
+        <td class="cliente" data-label="Cliente">${esc(r[0])}</td>
+        <td data-label="Dia Fixo">${esc(r[1])}</td>
+        <td class="num" data-label="Horário">${esc(r[2])}</td>
+        <td data-label="Status"><span class="badge ${badgeClass}">${esc(r[3])}</span></td>
+        <td class="obs" data-label="Observação">${esc(r[4]) || "—"}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+}
+
+function renderAll(rows){
+  currentData = rows;
+  renderKPIs(rows);
+  renderCharts(rows);
+  renderTable(rows, currentFilter);
+}
+
+document.querySelectorAll(".filters button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".filters button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentFilter = btn.dataset.filter;
+    renderTable(currentData, currentFilter);
+  });
+});
+
+renderAll(data);
+
+// ---------- Google Sheets ----------
+const SHEET_ID = "1hzjtUkvNg7m7G1qXjm59imxtyi3Tg4Yi";
+const SHEET_TAB_NAME = "Relação";
+
+function parseCSV(text){
+  const rows = [];
+  let row = [], field = "", inQuotes = false;
+  for (let i = 0; i < text.length; i++){
+    const c = text[i], next = text[i+1];
+    if (inQuotes){
+      if (c === '"' && next === '"'){ field += '"'; i++; }
+      else if (c === '"'){ inQuotes = false; }
+      else { field += c; }
+    } else {
+      if (c === '"'){ inQuotes = true; }
+      else if (c === ','){ row.push(field); field = ""; }
+      else if (c === '\n'){ row.push(field); rows.push(row); row = []; field = ""; }
+      else if (c === '\r'){ /* skip */ }
+      else { field += c; }
+    }
+  }
+  if (field.length || row.length){ row.push(field); rows.push(row); }
+  return rows;
+}
+
+function processRows(rows, sourceLabel){
+  const norm = s => (s || "").toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  const headerIdx = rows.findIndex(r => norm(r[0]) === "cliente");
+  if (headerIdx === -1){
+    throw new Error(`Não encontrei a coluna "Cliente" em ${sourceLabel}.`);
+  }
+  const parsed = rows.slice(headerIdx + 1)
+    .filter(r => r[0] && r[0].toString().trim() !== "")
+    .map(r => [
+      (r[0] || "").toString().trim(),
+      (r[1] || "").toString().trim(),
+      (r[2] || "").toString().trim(),
+      (r[3] || "").toString().trim(),
+      (r[4] || "").toString().trim()
+    ]);
+  if (parsed.length === 0){
+    throw new Error(`Encontrei o cabeçalho em ${sourceLabel}, mas nenhuma linha de dados abaixo dele.`);
+  }
+  return parsed;
+}
+
+const statusEl = document.getElementById("uploadStatus");
+const refreshBtn = document.getElementById("loadSheetBtn");
+const lastUpdateText = document.getElementById("lastUpdateText");
+
+function marcarAtualizacao(){
+  const d = new Date();
+  const p = n => String(n).padStart(2, "0");
+  lastUpdateText.textContent =
+    `Atualizado em ${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} às ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+refreshBtn.addEventListener("click", async () => {
+  statusEl.textContent = "Buscando dados da planilha...";
+  statusEl.className = "upload-status";
+  refreshBtn.classList.add("loading");
+  refreshBtn.disabled = true;
+
+  if (typeof XLSX === "undefined") {
+    statusEl.textContent = "Erro: a biblioteca de leitura de planilhas não carregou. Recarregue a página.";
+    statusEl.className = "upload-status error";
+    refreshBtn.classList.remove("loading");
+    refreshBtn.disabled = false;
+    return;
+  }
+
+  // Arquivo .xlsx armazenado no Google Drive — baixa via export e lê com XLSX.
+  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=xlsx`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`A planilha respondeu com erro ${res.status}. Verifique se o compartilhamento está como "Qualquer pessoa com o link pode ver".`);
+
+    const buf = await res.arrayBuffer();
+
+    // Se veio HTML (login/permissão), os primeiros bytes não são de um .xlsx (PK\x03\x04).
+    const head = new Uint8Array(buf.slice(0, 2));
+    if (head[0] !== 0x50 || head[1] !== 0x4B) {
+      throw new Error('A planilha não está acessível publicamente. No Google Drive, clique com o botão direito no arquivo → "Compartilhar" → "Qualquer pessoa com o link pode ver".');
+    }
+
+    const wb = XLSX.read(buf, { type: "array" });
+    const norm = s => (s || "").toString().normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+    let sheetName = wb.SheetNames.find(n => norm(n).includes("rela")) || wb.SheetNames[0];
+    const sheet = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" });
+
+    const parsed = processRows(rows, `a planilha (aba "${sheetName}")`);
+    renderAll(parsed);
+    marcarAtualizacao();
+    statusEl.textContent = `${parsed.length} clientes carregados.`;
+    statusEl.className = "upload-status success";
+  } catch (err) {
+    console.error("Erro ao buscar a planilha:", err);
+    statusEl.textContent = "Não consegui buscar a planilha: " + err.message;
+    statusEl.className = "upload-status error";
+  } finally {
+    refreshBtn.classList.remove("loading");
+    refreshBtn.disabled = false;
+  }
+});
+
+
+// Atualiza automaticamente da planilha ao abrir a pagina.
+refreshBtn.click();
+</script>
+</body>
+</html>
